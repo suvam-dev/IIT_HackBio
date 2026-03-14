@@ -40,6 +40,7 @@ This repository is organized around a notebook-first antimicrobial resistance wo
 │   └── graphs/
 ├── scripts/
 ├── backend/
+├── fasta_to_tsv_pipeline/
 └── frontend/
 ```
 
@@ -102,6 +103,27 @@ For the backend:
 
 ```bash
 .venv/bin/pip install -r backend-requirements.txt
+```
+
+## FASTA to TSV Pipeline
+
+Use the helper script in `fasta_to_tsv_pipeline/` to:
+
+1. Read genome IDs
+2. Download FASTA files (API template or BV-BRC FTPS fallback)
+3. Run AMRFinderPlus
+4. Save TSV outputs into `amr_results/`
+
+Install AMRFinderPlus once:
+
+```bash
+conda create -y -n amrfix -c conda-forge -c bioconda ncbi-amrfinderplus
+```
+
+Run from repo root (single-line command):
+
+```bash
+conda run -n amrfix python3 fasta_to_tsv_pipeline/download_and_convert.py --genome-ids-file data/interim/genome_ids.txt --amr-results-dir amr_results --amrfinder-bin /Users/suvanghosh/miniconda3/envs/amrfix/bin/amrfinder
 ```
 
 ## Notes
