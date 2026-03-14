@@ -46,3 +46,4 @@ conda run -n amrfix python3 fasta_to_tsv_pipeline/download_and_convert.py --geno
 - Failures are logged to `amr_results/download_convert_failures.log`.
 - FASTA files are cached in `fasta_to_tsv_pipeline/fasta_cache/` during processing.
 - Add `--keep-fasta` if you want to keep cached FASTA files after conversion.
+- Download progress is printed live for `.fna`/zip transfers.

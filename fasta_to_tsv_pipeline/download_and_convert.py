@@ -27,6 +27,45 @@ NCBI_DATASETS_DOWNLOAD = (
 )
 
 
+def _format_bytes(n_bytes: int) -> str:
+    units = ["B", "KB", "MB", "GB", "TB"]
+    value = float(n_bytes)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{int(n_bytes)} B"
+
+
+def _print_progress(prefix: str, downloaded: int, total: int | None) -> None:
+    if total and total > 0:
+        pct = min(100.0, (downloaded / total) * 100)
+        msg = (
+            f"\r{prefix}: {_format_bytes(downloaded)} / {_format_bytes(total)} "
+            f"({pct:5.1f}%)"
+        )
+    else:
+        msg = f"\r{prefix}: {_format_bytes(downloaded)}"
+    print(msg, end="", flush=True)
+
+
+def _download_http_to_file(url: str, destination: Path, timeout: int, label: str) -> None:
+    with urlopen(url, timeout=timeout) as response, destination.open("wb") as handle:
+        total_header = response.headers.get("Content-Length")
+        total = int(total_header) if total_header and total_header.isdigit() else None
+        downloaded = 0
+        while True:
+            chunk = response.read(1024 * 64)
+            if not chunk:
+                break
+            handle.write(chunk)
+            downloaded += len(chunk)
+            _print_progress(label, downloaded, total)
+    print("")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -106,8 +145,7 @@ def download_via_api(api_url_template: str, genome_id: str, out_path: Path) -> b
 
     url = api_url_template.format(genome_id=genome_id)
     try:
-        with urlopen(url, timeout=30) as response, out_path.open("wb") as handle:
-            shutil.copyfileobj(response, handle)
+        _download_http_to_file(url, out_path, timeout=30, label=f"[{genome_id}] API .fna")
         return out_path.exists() and out_path.stat().st_size > 0
     except (HTTPError, URLError, TimeoutError, OSError, ValueError):
         if out_path.exists():
@@ -135,8 +173,23 @@ def download_via_bvbrc_ftp(genome_id: str, out_path: Path) -> bool:
             for remote_path in candidates:
                 tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
                 try:
+                    remote_size: int | None = None
+                    try:
+                        remote_size = ftp.size(remote_path)
+                    except ftplib.all_errors:
+                        remote_size = None
+
+                    downloaded = 0
+
+                    def _write_chunk(chunk: bytes) -> None:
+                        nonlocal downloaded
+                        handle.write(chunk)
+                        downloaded += len(chunk)
+                        _print_progress(f"[{genome_id}] FTP {Path(remote_path).name}", downloaded, remote_size)
+
                     with tmp_path.open("wb") as handle:
-                        ftp.retrbinary(f"RETR {remote_path}", handle.write)
+                        ftp.retrbinary(f"RETR {remote_path}", _write_chunk)
+                    print("")
 
                     if tmp_path.stat().st_size == 0:
                         tmp_path.unlink(missing_ok=True)
@@ -204,10 +257,23 @@ def download_via_bvbrc_api_ncbi(genome_id: str, out_path: Path) -> bool:
     tmp_zip_path: Path | None = None
     tmp_extract_dir: Path | None = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmpf:
-            tmp_zip_path = Path(tmpf.name)
-            with urlopen(url, timeout=120) as response:
-                shutil.copyfileobj(response, tmpf)
+        fd, raw_tmp_path = tempfile.mkstemp(suffix=".zip")
+        tmp_zip_path = Path(raw_tmp_path)
+        Path(tmp_zip_path).unlink(missing_ok=True)
+        # mkstemp returns an open fd; close it so the HTTP download can recreate the file cleanly.
+        try:
+            import os
+
+            os.close(fd)
+        except OSError:
+            pass
+
+        _download_http_to_file(
+            url,
+            tmp_zip_path,
+            timeout=120,
+            label=f"[{genome_id}] NCBI dataset zip",
+        )
 
         if tmp_zip_path.stat().st_size == 0:
             return False
