@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AMR Prediction Frontend</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="bg-orb orb-a"></div>
+  <div class="bg-orb orb-b"></div>
+
+  <main class="shell">
+    <header class="hero">
+      <p class="eyebrow">IIT Mandi HackBIO</p>
+      <h1>AMR Prediction Dashboard</h1>
+      <p class="subtitle">Run live AMR predictions from genome IDs, load <code>submission.csv</code>, and review antibiotic resistance calls.</p>
+    </header>
+
+    <section class="controls panel reveal">
+      <div class="control-group">
+        <button id="load-default" class="btn btn-primary">Load Local <code>submission.csv</code></button>
+        <label class="btn btn-ghost" for="file-input">Upload CSV</label>
+        <input id="file-input" type="file" accept=".csv" hidden />
+      </div>
+      <div class="control-group">
+        <input id="search-input" type="text" placeholder="Search Genome ID..." />
+      </div>
+      <p id="status" class="status">Loading bundled submission data...</p>
+    </section>
+
+    <section class="panel lookup-panel reveal">
+      <div class="table-head">
+        <h2>Genome ID Predictor</h2>
+        <p>Enter one genome ID to run backend inference when an AMR TSV is available.</p>
+      </div>
+      <div class="control-group lookup-controls">
+        <input id="genome-input" type="text" placeholder="Enter Genome ID, e.g. 562.100058" />
+        <button id="predict-btn" class="btn btn-primary">Predict</button>
+        <button id="download-tsv-btn" class="btn btn-ghost">Download TSV</button>
+        <label class="btn btn-ghost" for="tsv-input">Upload TSV</label>
+        <input id="tsv-input" type="file" accept=".tsv,.tab,text/tab-separated-values" hidden />
+        <button id="predict-upload-btn" class="btn btn-ghost">Predict From TSV</button>
+      </div>
+      <p id="lookup-status" class="status">Load data to start predicting.</p>
+      <div id="prediction-result" class="prediction-result"></div>
+    </section>
+
+    <section class="stats-grid reveal" id="stats-grid">
+      <article class="stat panel">
+        <p class="stat-label">Genomes</p>
+        <p id="stat-genomes" class="stat-value">-</p>
+      </article>
+      <article class="stat panel">
+        <p class="stat-label">Ciprofloxacin Resistant</p>
+        <p id="stat-cip" class="stat-value">-</p>
+      </article>
+      <article class="stat panel">
+        <p class="stat-label">Gentamicin Resistant</p>
+        <p id="stat-gen" class="stat-value">-</p>
+      </article>
+      <article class="stat panel">
+        <p class="stat-label">Meropenem Resistant</p>
+        <p id="stat-mer" class="stat-value">-</p>
+      </article>
+    </section>
+
+    <section class="panel table-panel reveal">
+      <div class="table-head">
+        <h2>Predictions</h2>
+        <p id="row-count">0 rows</p>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Genome ID</th>
+              <th>Ciprofloxacin</th>
+              <th>Gentamicin</th>
+              <th>Meropenem</th>
+              <th>Cipro P(R)</th>
+              <th>Gent P(R)</th>
+              <th>Mero P(R)</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="./submission-data.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>

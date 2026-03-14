@@ -1,0 +1,4 @@
+antibiotic,rows,n_features,best_model,best_auc,best_mcc,df_file,bundle_file
+gentamicin,277,311,logistic_regression,1.0,0.9128709291752769,../data/features/gentamicin_df.csv,../models/gentamicin_model_bundle.pkl
+ciprofloxacin,266,311,logistic_regression,0.975,0.8918825850158447,../data/features/ciprofloxacin_df.csv,../models/ciprofloxacin_model_bundle.pkl
+meropenem,239,311,logistic_regression,0.9658119658119658,0.8050112948805689,../data/features/meropenem_df.csv,../models/meropenem_model_bundle.pkl
