@@ -5,6 +5,7 @@ import argparse
 import ftplib
 import gzip
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,14 @@ BV_BRC_API_GENOME_QUERY = (
 NCBI_DATASETS_DOWNLOAD = (
     "https://api.ncbi.nlm.nih.gov/datasets/v2/genome/accession/{assembly_accession}"
     "/download?include_annotation_type=GENOME_FASTA"
+)
+DEFAULT_AMRFINDER_PATHS = (
+    "amrfinder",
+    "/Users/suvanghosh/miniconda3/envs/amrfix/bin/amrfinder",
+)
+DEFAULT_AMRFINDER_DB_PATHS = (
+    "/Users/suvanghosh/IIT_HackBio-1/amrfinder_db/latest",
+    "/Users/suvanghosh/miniconda3/share/amrfinderplus/data/latest",
 )
 
 
@@ -121,6 +130,42 @@ def parse_args() -> argparse.Namespace:
         help="Keep downloaded FASTA files in cache. If omitted, cache is cleaned after conversion.",
     )
     return parser.parse_args()
+
+
+def resolve_amrfinder_bin(preferred: str | None = None) -> str | None:
+    candidates: list[str] = []
+    if preferred:
+        candidates.append(preferred)
+    candidates.extend(DEFAULT_AMRFINDER_PATHS)
+
+    for candidate in candidates:
+        resolved = shutil.which(candidate)
+        if resolved:
+            return resolved
+        candidate_path = Path(candidate)
+        if candidate_path.exists() and candidate_path.is_file():
+            return str(candidate_path)
+
+    return None
+
+
+def resolve_amrfinder_db_dir(preferred: str | None = None) -> str | None:
+    candidates: list[str] = []
+    env_candidate = os.environ.get("AMRFINDER_DB_DIR", "").strip()
+    if preferred:
+        candidates.append(preferred)
+    if env_candidate:
+        candidates.append(env_candidate)
+    candidates.extend(DEFAULT_AMRFINDER_DB_PATHS)
+
+    for candidate in candidates:
+        candidate_path = Path(candidate)
+        if candidate_path.exists() and candidate_path.is_dir():
+            version_file = candidate_path / "version.txt"
+            if version_file.exists():
+                return str(candidate_path)
+
+    return None
 
 
 def read_genome_ids(path: Path) -> list[str]:
@@ -311,6 +356,12 @@ def run_amrfinder(amrfinder_bin: str, fasta_path: Path, out_tsv: Path, threads: 
         "--threads",
         str(threads),
     ]
+    database_dir = resolve_amrfinder_db_dir()
+    if database_dir:
+        cmd.extend(["--database", database_dir])
+    skip_hmm_check = os.environ.get("AMRFINDER_SKIP_HMM_CHECK", "1").strip().lower()
+    if skip_hmm_check not in {"0", "false", "no"}:
+        cmd.extend(["--parm", "-skip_hmm_check"])
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
@@ -324,10 +375,48 @@ def run_amrfinder(amrfinder_bin: str, fasta_path: Path, out_tsv: Path, threads: 
         )
 
 
+def convert_genome_id_to_tsv(
+    genome_id: str,
+    amr_results_dir: Path,
+    fasta_cache_dir: Path,
+    api_url_template: str = "",
+    amrfinder_bin: str | None = None,
+    threads: int = 4,
+    overwrite: bool = False,
+    keep_fasta: bool = True,
+) -> Path:
+    resolved_amrfinder = resolve_amrfinder_bin(amrfinder_bin)
+    if not resolved_amrfinder:
+        raise RuntimeError(
+            "AMRFinderPlus executable not found. Install it and make sure it is available in PATH, "
+            "or configure a valid amrfinder binary path."
+        )
+
+    safe_id = genome_id.strip()
+    if not safe_id:
+        raise ValueError("Genome ID is required.")
+
+    amr_results_dir.mkdir(parents=True, exist_ok=True)
+    fasta_cache_dir.mkdir(parents=True, exist_ok=True)
+
+    out_tsv = amr_results_dir / f"{safe_id}.tsv"
+    if out_tsv.exists() and out_tsv.stat().st_size > 0 and not overwrite:
+        return out_tsv
+
+    fasta_path = ensure_fasta(safe_id, fasta_cache_dir, api_url_template)
+    run_amrfinder(resolved_amrfinder, fasta_path, out_tsv, threads)
+
+    if not keep_fasta:
+        fasta_path.unlink(missing_ok=True)
+
+    return out_tsv
+
+
 def main() -> int:
     args = parse_args()
 
-    if shutil.which(args.amrfinder_bin) is None:
+    resolved_amrfinder = resolve_amrfinder_bin(args.amrfinder_bin)
+    if not resolved_amrfinder:
         print(
             "ERROR: AMRFinderPlus executable not found. "
             "Install it and make sure it is available in PATH, or pass --amrfinder-bin.",
@@ -350,13 +439,17 @@ def main() -> int:
             continue
 
         try:
-            fasta_path = ensure_fasta(genome_id, args.fasta_cache_dir, args.api_url_template)
-            run_amrfinder(args.amrfinder_bin, fasta_path, out_tsv, args.threads)
-
-            if not args.keep_fasta:
-                fasta_path.unlink(missing_ok=True)
-
-            print(f"[{i}/{len(genome_ids)}] {genome_id}: wrote {out_tsv}")
+            written_tsv = convert_genome_id_to_tsv(
+                genome_id=genome_id,
+                amr_results_dir=args.amr_results_dir,
+                fasta_cache_dir=args.fasta_cache_dir,
+                api_url_template=args.api_url_template,
+                amrfinder_bin=resolved_amrfinder,
+                threads=args.threads,
+                overwrite=args.overwrite,
+                keep_fasta=args.keep_fasta,
+            )
+            print(f"[{i}/{len(genome_ids)}] {genome_id}: wrote {written_tsv}")
             successes += 1
         except Exception as exc:
             failures.append(f"{genome_id}: {exc}")

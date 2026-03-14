@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+
+amrfinder_db/
+amr_results/amrfinder_update.log
+amr_results/amrfinder_update_workspace.log
+amr_results/download_convert_failures.log
+
+fasta_to_tsv_pipeline/fasta_cache/

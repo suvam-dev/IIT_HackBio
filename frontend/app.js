@@ -348,7 +348,7 @@ async function downloadGenomeTsv() {
     return;
   }
 
-  lookupStatusEl.textContent = `Downloading genome file for ${genomeId}...`;
+  lookupStatusEl.textContent = `Preparing genome TSV for ${genomeId}...`;
 
   try {
     const response = await fetch(`/api/download-genome?genome_id=${encodeURIComponent(genomeId)}`);
@@ -358,16 +358,16 @@ async function downloadGenomeTsv() {
       throw new Error(payload.error || `HTTP ${response.status}`);
     }
 
-    lookupStatusEl.textContent = `Genome file ready: ${payload.saved_file} (${payload.source}).`;
+    lookupStatusEl.textContent = `Genome TSV ready: ${payload.saved_file} (${payload.source}).`;
     predictionResultEl.innerHTML = `
       <article class="prediction-summary panel">
-        <p class="prediction-summary-label">Downloaded Genome File</p>
+        <p class="prediction-summary-label">Prepared Genome File</p>
         <h3>${payload.genome_id}</h3>
-        <p class="prediction-summary-copy">Saved as ${payload.saved_file} in the backend results folder.</p>
+        <p class="prediction-summary-copy">Saved as ${payload.saved_file} in the backend results folder via ${payload.source}.</p>
       </article>
     `;
   } catch (error) {
-    showLookupMessage(`Genome TSV download failed: ${error.message}`);
+    showLookupMessage(`Genome TSV preparation failed: ${error.message}`);
   }
 }
 

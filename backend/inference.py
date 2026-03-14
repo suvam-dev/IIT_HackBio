@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import ftplib
+import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -9,8 +11,14 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 AMR_DIR = ROOT / "amr_results"
+FASTA_CACHE_DIR = ROOT / "fasta_to_tsv_pipeline" / "fasta_cache"
 BV_BRC_FTP_HOST = "ftp.bvbrc.org"
 BV_BRC_FTP_DIR = "/genomes"
+
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from fasta_to_tsv_pipeline.download_and_convert import convert_genome_id_to_tsv
 
 
 class InferenceError(Exception):
@@ -36,6 +44,7 @@ class ModelPredictor:
 
         self._joblib = joblib
         self._bundles = self._load_bundles()
+        self._last_conversion_error: str | None = None
 
     def _load_bundles(self) -> dict[str, PredictionBundle]:
         bundles: dict[str, PredictionBundle] = {}
@@ -86,7 +95,41 @@ class ModelPredictor:
         if downloaded is not None and downloaded.exists():
             return downloaded, "downloaded"
 
-        raise InferenceError(f"No AMR TSV found for genome ID {safe_id}, and remote download failed.")
+        converted = self._convert_fasta_to_genome_file(safe_id)
+        if converted is not None and converted.exists():
+            return converted, "converted"
+
+        detail = f" Conversion attempt failed: {self._last_conversion_error}" if self._last_conversion_error else ""
+        raise InferenceError(
+            f"No AMR TSV found for genome ID {safe_id}, and remote download failed.{detail}"
+        )
+
+    def _convert_fasta_to_genome_file(self, genome_id: str) -> Path | None:
+        self._last_conversion_error = None
+        amrfinder_bin = os.environ.get("AMRFINDER_BIN", "").strip() or None
+        api_url_template = os.environ.get("FASTA_API_URL_TEMPLATE", "").strip()
+        keep_fasta = os.environ.get("KEEP_FASTA_CACHE", "1").strip().lower() not in {"0", "false", "no"}
+        threads_raw = os.environ.get("AMRFINDER_THREADS", "4").strip()
+
+        try:
+            threads = int(threads_raw)
+        except ValueError:
+            threads = 4
+
+        try:
+            return convert_genome_id_to_tsv(
+                genome_id=genome_id,
+                amr_results_dir=AMR_DIR,
+                fasta_cache_dir=FASTA_CACHE_DIR,
+                api_url_template=api_url_template,
+                amrfinder_bin=amrfinder_bin,
+                threads=max(1, threads),
+                overwrite=False,
+                keep_fasta=keep_fasta,
+            )
+        except Exception as exc:
+            self._last_conversion_error = str(exc)
+            return None
 
     def _download_remote_genome_file(self, genome_id: str) -> Path | None:
         AMR_DIR.mkdir(parents=True, exist_ok=True)
